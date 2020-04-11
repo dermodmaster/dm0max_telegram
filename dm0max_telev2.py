@@ -1,14 +1,20 @@
-import json
-import telegram
-import logging
-import socket
-import time
-from geopy import distance
-from geopy import Point
-from datetime import datetime
+try:
+	import json
+	import telegram
+	import logging
+	import socket
+	import time
+	from geopy import distance
+	from geopy import Point
+	from datetime import datetime
+except Exception as e:
+	f= open("/home/pi/Crons/guru99.txt","w+")
+	f.write(str(e))
+	f.close()
+	exit()
 
 data = None
-bottokenfile = open("bottoken.txt","r")
+bottokenfile = open("/home/pi/Crons/bottoken.txt","r")
 bottoken = bottokenfile.read().strip()
 print(bottoken)
 # In welchem Intervall soll man wieder für ein Flugzeug benachrichtigt werden (SEKUNDEN)
@@ -20,8 +26,8 @@ receiverpos = Point("52.290542 8.701938")
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
-handler = logging.FileHandler("telegram.log")
-handler.setLevel(logging.DEBUG)
+handler = logging.FileHandler("/home/pi/Crons/telegram.log")
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
@@ -39,7 +45,7 @@ planesWFD = []  # WFD = WaitingForData
 
 # Militärische Hubschrauber
 bueckeburg = ["HELI264", "HELI911", "HELI646", "HELI942", "HELI955", "HELI922", "HELI652", "HELI942", "HELI332",
-              "HELI605", "HELI950", "HELI901"]
+              "HELI605", "HELI950", "HELI901", "HELI417", "HELI332"]
 
 bot = telegram.Bot(token=bottoken)
 # bot.send_message(-254257027, text='Empfängerbot ist online.!')
@@ -147,14 +153,14 @@ def messageToTelegram(flugzeug, besondererText):
 
     nachricht += "\nhttps://dm0max.3ef.de/"
     try:
-        #bot.send_message(-254257027, text=nachricht)
+        bot.send_message(-254257027, text=nachricht)
         logger.debug("Sende eine Nachricht an Telegram: " + nachricht)
         if "lat" in flugzeug and "lon" in flugzeug:
             logger.debug("Sende Position: " + str(flugzeug["lat"]) + " " + str(flugzeug["lon"]))
-            #bot.sendLocation(-254257027, latitude=str(flugzeug["lat"]), longitude=str(flugzeug["lon"]))
+            bot.sendLocation(-254257027, latitude=str(flugzeug["lat"]), longitude=str(flugzeug["lon"]))
     except Exception as e:
         logger.error("Beim senden einer Telegram Nachricht: " + str(e))
-    # print(nachricht)
+    print(nachricht)
 
 
 def retrieveData():
@@ -179,21 +185,32 @@ while True:
             if "flight" in plane:
                 if plane["flight"][0:6] == "HUMMEL":
                     planeToMessage(plane, "Polizeihubschrauber")
-                    checkHelicopter(plane)
+                    #checkHelicopter(plane)
+                    continue
+                if plane["flight"][0:3] == "BPO":
+                    planeToMessage(plane, "Bundespolizei")
+                    continue
                 if plane["flight"][0:3] == "CHX":
                     planeToMessage(plane, "Rettungshubschrauber - Christoph")
-                    checkHelicopter(plane)
+                    continue
+                    #checkHelicopter(plane)
                 if plane["flight"].strip() in bueckeburg:
-                    checkHelicopter(plane)
+                    #checkHelicopter(plane)
                     planeToMessage(plane, "BW Heeresflieger - möglw. Bückeburg")
-                if plane["flight"][0:3] == "GAF":
-                    planeToMessage(plane, "German Air Force - LUFTWAFFE")
-                if plane["flight"][0:3] == "GAM":
-                    planeToMessage(plane, "German Army - Bundeswehr")
-                if plane["flight"][0:3] == "GNY":
-                    planeToMessage(plane, "German Navy - Bundeswehr")
+                    continue
                 if plane["flight"][0:3] == "FCK":
                     planeToMessage(plane, "Flightchecker - Deutsches Zentrum für Luft- und Raumfahrt")
+                    continue
+                if plane["flight"][0:3] in ["GAF","GAM","GNY"]:
+                    planepos = Point(str(plane["lat"]) + " " + str(plane["lon"]))
+                    rxdistance = round(distance.distance(receiverpos, planepos).kilometers, 3)
+                    if rxdistance < 15:
+                        if plane["flight"][0:3] == "GAF":
+                            planeToMessage(plane, "German Air Force - LUFTWAFFE")
+                        if plane["flight"][0:3] == "GAM":
+                            planeToMessage(plane, "German Army - Bundeswehr")
+                        if plane["flight"][0:3] == "GNY":
+                            planeToMessage(plane, "German Navy - Bundeswehr")
 
     logger.debug("Warte etwas...")
     time.sleep(5)
